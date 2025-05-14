@@ -7,44 +7,25 @@ output: pdf_document
 
 ### Introduction
 
-The topic chosen for this project is students' mental health, due to it's importance and impact on students' academic success. To study this theme, the chosen dataset was a Student Depression Dataset from Kaggle which contains the following variables:
+The topic chosen for this project is Portugal electricity statistics between 1980 and 2021. The data was removed from a Global Electricity Statistics dataset in Kaggle, where only the data relating to Portugal was kept. The dataset is in Time Series format, where the index is the years and the features are the following variables:
 
--   Id - unique identifier assigned to each student record;
--   Gender - gender of the student (e.g., Male, Female, Other);
--   Age - age of the student in years;
--   City - city or region where the student resides;
--   Profession - field of work or study of the student;
--   Academic_pressure - level of pressure the student faces in academic settings in the range from 0 to 5;
--   Work_pressure - level of pressure related to work or job responsibilities in the range from 0 to 5;
--   CGPA - cumulative grade point average of the student in the range from 0 to 10;
--   Study_satisfaction - level of the student’s satisfaction with their studies in the range from 0 to 5;
--   Job_satisfaction - level of the student’s satisfaction with their job or work environment in the range from 0 to 5;
--   Sleep_duration - average number of hours the student sleeps per day out of 4 options;
--   Dietary_habits - assessment of the student’s eating patterns and nutritional habits out of 3 options;
--   Degree - academic degree or program that the student is pursuing;
--   Suicidal_thoughts - binary indicator (Yes/No) that reflects whether the student has ever experienced suicidal ideation;
--   Work_study_hours - average integer number of hours per day the student dedicates to work or study;
--   Financial_stress - level of the stress experienced due to financial concerns in the range from 0 to 5;
--   Mental_illness_history - binary indicator (Yes/No) that reflects whether there is a family history of mental illness;
--   Depression - binary indicator (Yes/No) that reflects whether the student is experiencing depression.
+* Elec_generation - Electricity generation/production in billion kWh;
+* Elec_consumption - Electricity consumption in billion kWh;
+* Elec_imports - Electricity imports in billion kWh;
+* Elec_exports - Electricity exports in billion kWh;
+* Net_imports - Electricity net imports in billion kWh;
+* Installed_capacity - The maximum amount of electricity that a generating station can produce in million kW;
+* Distribution_loss - Losses that occur in transmission of electricity between the sources of supply and points of distribution in billion kWh.
 
+The problem we want to study is how the electricity consumption has been changing in the period considered. This is an extremely important theme becuase studying it will allow us to predict potential events such as the black out that happened in March 2025. Is the electricity consumption growing beyond the electricity generation?
 
-Firstly, we need to clean the dataset and to remove
+### Stationarity of the process
 
-```         
-eletricity_ds <- read.csv("C:/Users/inesb/Downloads/Portugal_yearly_energy_data.csv")
-View(eletricity_ds)
+Firstly, we need to make sure the variable we are going to study - electricity comsumption - belongs to a stochastic stationary process.
 
 ```
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+eletricity_ds <- read.csv("C:/Users/inesb/Downloads/Portugal_yearly_energy_data.csv")
+View(eletricity_ds)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
