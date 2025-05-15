@@ -7,7 +7,9 @@ output: pdf_document
 
 ### Introduction
 
-The topic chosen for this project is Portugal electricity statistics between 1980 and 2021. The data was removed from a Global Electricity Statistics dataset in Kaggle, where only the data relating to Portugal was kept. The dataset is in Time Series format, where the index is the years and the features are the following variables:
+Recently, energy forecasting has become increasingly important for supporting grid stability and sustainable energy policy. Accurate forecasts are essential for energy providers to anticipate demand, manage resources efficiently, and support the ongoing energy transition, so we will focus on forecasting electricity consumption in Portugal. The goal of this project is to apply the Box-Jenkins methodology to model and forecast electricity usage patterns, helping to inform decisions related to grid management and energy planning.
+
+The data we will use, from 1980 to 2021, was withdrawn from a Global Electricity Statistics dataset in Kaggle, where only the data relating to Portugal was kept. The dataset is in the normal Time Series format, where the index is the years and the features are the following variables:
 
 * Elec_generation - Electricity generation/production in billion kWh;
 * Elec_consumption - Electricity consumption in billion kWh;
@@ -17,15 +19,120 @@ The topic chosen for this project is Portugal electricity statistics between 198
 * Installed_capacity - The maximum amount of electricity that a generating station can produce in million kW;
 * Distribution_loss - Losses that occur in transmission of electricity between the sources of supply and points of distribution in billion kWh.
 
-The problem we want to study is how the electricity consumption has been changing in the period considered. This is an extremely important theme becuase studying it will allow us to predict potential events such as the black out that happened in March 2025. Is the electricity consumption growing beyond the electricity generation?
-
 ### Stationarity of the process
 
-Firstly, we need to make sure the variable we are going to study - electricity comsumption - belongs to a stochastic stationary process.
+Firstly, we need to make sure that the variable we are going to study - electricity consumption - belongs to a stochastic stationary process.
+
+In the next piece of code, we are going to import the dataset and create a tsibble off of it, with the index being the time variable - X. Then, we will autoplot the desired variable - Elec_consumption.
 
 ```
 eletricity_ds <- read.csv("C:/Users/inesb/Downloads/Portugal_yearly_energy_data.csv")
 View(eletricity_ds)
+library(fpp3)
+elec_tsibble <- eletricity_ds %>% as_tsibble(index = X)
+View(elec_tsibble)
+elec_tsibble %>% autoplot(Elec_consumption)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+In the next part, we will make an Augmented Dickey Fuller Test to check the stationarity of the process chosen. We proceeded by creating an array of the values in the desired variable - Elec_consumption - and setting "start" to the first year considered - 1980 - and "frequency" to 1, since it's yearly data. If the p-value < 0.05, we will reject the null hypothesis and conclude that the series is stationary. If the p-value ≥ 0.05, the series is non-stationary.
+We will also display the plot, the ACF, and the PACF so we can get some insights.
+
+```
+library(tseries)
+set.seed(30)
+data <- eletricity_ds %>% select(Elec_consumption)
+data_ts <- ts(data, start = 1980, frequency = 1)
+adf_result <- adf.test(data_ts)
+print(adf_result)
+
+# plotting the Elec_consumption, ACF and PACF
+elec_tsibble %>% gg_tsdisplay(Elec_consumption, plot_type='partial')
+```
+
+Since the p-value = 0.9739, we accepted the null hypotheses, meaning the series is non-stationary. This is also clearly visible in the ACF function, which is infinite but doesn't decay to zero exponentially.
+By looking at the Elec_consumption plot, it looks like a random walk, but let's check if it actually is by doing the KPSS Unit Root Test.
+
+```
+library(urca)
+kpss_test <- ur.kpss(data_ts)
+summary(kpss_test)
+```
+
+The test statistic is greater than all critical values, so we reject the null hypotheses and the time series is very likely difference-stationary (DSP).
+
+```
+ts_diff <- diff(data_ts, differences = 1)
+plot(ts_diff, main = "Differenced Electricity Consumption")
+kpss_test2 <- ur.kpss(ts_diff)
+summary(kpss_test2)
+adf_result2 <- adf.test(ts_diff)
+print(adf_result2)
+```
+
+By making the same tests as before, we conclude the first order differed time series is still non-stationary, so we will difference again.
+
+```
+ts_diff2 <- diff(ts_diff, differences = 1)
+plot(ts_diff2, main = "Second Order Differenced Electricity Consumption")
+kpss_test3 <- ur.kpss(ts_diff2)
+summary(kpss_test3)
+adf_result3 <- adf.test(ts_diff2)
+print(adf_result3)
+```
+
+Now, we finally have a stationary time series relating to the Electricity Consumption in the period considered.
+
+### Tentative Identification
+
+In the next piece of code we will generate the ACF and the PACF of the second order differenced time series, so we can suggest some candidate models for analysis during the next stages.
+
+```
+ts_diff_comp <- c(NA, NA, ts_diff2)
+elec_tsibble_comp <- elec_tsibble %>% mutate(Elec_cons_diff = ts_diff_comp)
+View(elec_tsibble_comp)
+elec_tsibble_comp %>% gg_tsdisplay(Elec_cons_diff, plot_type='partial')
+```
+
+By looking at the ACF, we can see it is finite and cuts off after lag 1 or 2, which suggests MA(1) or MA(2) model. By looking at the PACF, we can see it is infinite and exponentially decays to 0 after lag 2. The models we suggest looking into are ARIMA(2, 2, 1) and ARIMA(2, 2, 2).
+Let's also see what the algorithm picks:
+
+```
+library(forecast)
+auto.arima(ts_diff2)
+```
+
+The algorithm suggests ARIMA(0,0,1) so we will also look into ARIMA(0, 2, 1).
+Now let's create a function to calculate the Information Criteria through the 3 equations we know - Akaike IC (AIC), Hannan-Quinn IC (HQIC) and Bayesian or Schwarz IC (BSIC) - and test the model who minimizes them the most.
+
+```
+calc_ic <- function(dev, p, q, T) {
+  ldev <- log(dev)
+  k <- p + q + 1
+  aic <- ldev + 2*k/T
+  hqic <- ldev + 2*k*log(log(T))/T
+  bsic <- ldev + k*log(T)/T
+  return(c(aic, hqic, bsic))}
+  
+library(forecast)
+
+# fit ARIMA(2,2,1)
+model221 <- Arima(data_ts, order = c(2,2,1))
+dev221 <- model221$sigma2
+T221 <- length(model221$residuals)
+calc_ic(dev221, 2, 1, T221)
+
+# fit ARIMA(2,2,2)
+model222 <- Arima(data_ts, order = c(2,2,2))
+dev222 <- model222$sigma2
+T222 <- length(model222$residuals)
+calc_ic(dev222, 2, 2, T222)
+
+# fit ARIMA(0,2,1)
+model021 <- Arima(data_ts, order = c(0,2,1))
+summary(model021)
+dev021 <- model021$sigma2
+T021 <- length(model021$residuals)
+calc_ic(dev021, 0, 1, T021)
+```
+
+Acording to the values obtained, the model that minimizes the Information Criteria is ARIMA(0,2,1), so this should be the model we use from now on.
