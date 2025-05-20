@@ -21,14 +21,26 @@ The data we will use, from 1980 to 2021, was withdrawn from a Global Electricity
 
 ### Stationarity of the process
 
-Firstly, we need to make sure that the variable we are going to study - electricity consumption - belongs to a stochastic stationary process.
+Firstly, let's open all the libraries needed:
+
+```
+library(fpp3)
+library(tseries)
+library(urca)
+library(forecast)
+library(fable)
+```
+
+Now, before anything else, we need to make sure that the variable we are going to study - electricity consumption - belongs to a stochastic stationary process.
 
 In the next piece of code, we are going to import the dataset and create a tsibble off of it, with the index being the time variable - X. Then, we will autoplot the desired variable - Elec_consumption.
 
 ```
+# original dataset
 eletricity_ds <- read.csv("C:/Users/inesb/Downloads/Portugal_yearly_energy_data.csv")
 View(eletricity_ds)
-library(fpp3)
+
+# original tsibble
 elec_tsibble <- eletricity_ds %>% as_tsibble(index = X)
 View(elec_tsibble)
 elec_tsibble %>% autoplot(Elec_consumption)
@@ -38,9 +50,12 @@ In the next part, we will make an Augmented Dickey Fuller Test to check the stat
 We will also display the plot, the ACF, and the PACF so we can get some insights.
 
 ```
-library(tseries)
 set.seed(30)
+
+# Elec_consumption original array
 data <- eletricity_ds %>% select(Elec_consumption)
+
+# Elec_consumption time series array
 data_ts <- ts(data, start = 1980, frequency = 1)
 adf_result <- adf.test(data_ts)
 print(adf_result)
@@ -53,7 +68,6 @@ Since the p-value = 0.9739, we accepted the null hypotheses, meaning the series 
 By looking at the Elec_consumption plot, it looks like a random walk, but let's check if it actually is by doing the KPSS Unit Root Test.
 
 ```
-library(urca)
 kpss_test <- ur.kpss(data_ts)
 summary(kpss_test)
 ```
@@ -61,7 +75,9 @@ summary(kpss_test)
 The test statistic is greater than all critical values, so we reject the null hypotheses and the time series is very likely difference-stationary (DSP).
 
 ```
+# First-Order Differenced Elec_consumption time series array
 ts_diff <- diff(data_ts, differences = 1)
+
 plot(ts_diff, main = "Differenced Electricity Consumption")
 kpss_test2 <- ur.kpss(ts_diff)
 summary(kpss_test2)
@@ -72,7 +88,9 @@ print(adf_result2)
 By making the same tests as before, we conclude the first order differed time series is still non-stationary, so we will difference again.
 
 ```
+# Second-Order Differenced Elec_consumption time series array
 ts_diff2 <- diff(ts_diff, differences = 1)
+
 plot(ts_diff2, main = "Second Order Differenced Electricity Consumption")
 kpss_test3 <- ur.kpss(ts_diff2)
 summary(kpss_test3)
@@ -87,7 +105,10 @@ Now, we finally have a stationary time series relating to the Electricity Consum
 In the next piece of code we will generate the ACF and the PACF of the second order differenced time series, so we can suggest some candidate models for analysis during the next stages.
 
 ```
+# Complete Second-Order Differenced Elec_consumption time series array
 ts_diff_comp <- c(NA, NA, ts_diff2)
+
+# Complete original tsibble
 elec_tsibble_comp <- elec_tsibble %>% mutate(Elec_cons_diff = ts_diff_comp)
 View(elec_tsibble_comp)
 elec_tsibble_comp %>% gg_tsdisplay(Elec_cons_diff, plot_type='partial')
@@ -97,7 +118,6 @@ By looking at the ACF, we can see it is finite and cuts off after lag 1 or 2, wh
 Let's also see what the algorithm picks:
 
 ```
-library(forecast)
 auto.arima(ts_diff2)
 ```
 
@@ -112,8 +132,6 @@ calc_ic <- function(dev, p, q, T) {
   hqic <- ldev + 2*k*log(log(T))/T
   bsic <- ldev + k*log(T)/T
   return(c(aic, hqic, bsic))}
-  
-library(forecast)
 
 # fit ARIMA(2,2,1)
 model221 <- Arima(data_ts, order = c(2,2,1))
@@ -136,3 +154,28 @@ calc_ic(dev021, 0, 1, T021)
 ```
 
 Acording to the values obtained, the model that minimizes the Information Criteria is ARIMA(0,2,1), so this should be the model we use from now on.
+
+### Estimation
+
+Firstly, we will fit the model and check its report and residuals.
+
+```
+elec_tsibble %>% model(ARIMA(Elec_consumption ~ pdq(0,2,1))) %>% report()
+elec_tsibble %>% select(X, Elec_consumption) %>% select(arima021) %>% gg_tsresiduals()
+```
+
+Now we will do the Ljung-Box and the Ljung-Box-Pierce methods to check if the model is adequate or not with an hypotheses test:
+
+```
+# Fitted original tsibble
+elec_fit <- elec_tsibble %>% model(arima_021 = ARIMA(Elec_consumption ~ pdq(0,2,1)))
+
+View(elec_fit)
+augment(elec_fit) %>% features(.innov, ljung_box, lag = 10, dof = 3)
+augment(elec_fit) %>% features(.innov, box_pierce, lag = 10, dof = 3)
+```
+
+Since the p-value (0.898 and 0.846) is greater than the significance level (0.05), we accept the null hypotheses, meaning there is no residual autocorrelation, and our model is adequate.
+
+### Forecasting Implementation
+
