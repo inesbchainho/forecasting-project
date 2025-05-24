@@ -83,7 +83,7 @@ adf_result2 <- adf.test(ts_diff)
 print(adf_result2)
 ```
 
-By making the same tests as before, we conclude the first order differed time series is still non-stationary, so we will difference again.
+By making the same tests as before, we conclude the first order differenced time series is still non-stationary, so we will difference again.
 
 ```
 # Second-Order Differenced Elec_consumption time series array
