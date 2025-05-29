@@ -173,24 +173,9 @@ augment(elec_fit) %>% features(.innov, box_pierce, lag = 10, dof = 3)
 
 Since the p-value (0.898 and 0.846) is greater than the significance level (0.05), we accept the null hypotheses, meaning there is no residual autocorrelation, and our model is adequate.
 
-### Forecasting Implementation
-
-Now that we have identified and validated the ARIMA(0,2,1) model as the best candidate for modeling electricity consumption in Portugal, we can proceed with the forecasting phase. This step involves generating future values based on the fitted model and analyzing the predicted trends. The idea is to understand how electricity consumption may evolve in the upcoming years, assuming past patterns continue.
-
-```
-# Forecasting 10 years ahead using the fitted ARIMA(0,2,1) model
-forecast_elec <- elec_fit %>% forecast(h = "10 years")
-
-# Plot forecast with historical data
-forecast_elec %>% autoplot(elec_tsibble) +
-  labs(title = "Electricity Consumption Forecast (Portugal)",
-       y = "Electricity Consumption (billion kWh)",
-       x = "Year")
-```
-
 ### Accuracy Assessment
 
-To validate the predictive ability of our chosen model, we split the dataset into training and testing subsets. The training data was used to fit the model, and the last five years were kept as a test set to evaluate forecast performance. This approach allows us to assess how well the model generalizes to unseen data using established accuracy metrics.
+Now that we have identified and validated the ARIMA(0,2,1) model as the best candidate for modeling electricity consumption in Portugal, we assess its predictive performance on unseen data. To do this, we split the dataset into training and testing subsets. The training data was used to fit the model, and the last five years were kept as a test set to evaluate forecast performance. This approach allows us to assess how well the model generalizes to unseen data using established accuracy metrics.
 
 ```
 # Split into training/testing sets for accuracy 
@@ -219,6 +204,21 @@ The results show strong predictive performance:
 - A MAPE of 1.50% confirms excellent overall accuracy, with predictions deviating only slightly from actual consumption values.
 - Residual autocorrelation was low (ACF1 = 0.291), indicating that most of the temporal structure was successfully captured.
 - Although some metrics (MASE and RMSSE) returned NaN values, likely due to test sample size or scaling limitations, the available indicators suggest that the model performs well.
+
+### Forecasting Implementation
+
+With the ARIMA(0,2,1) model validated through historical accuracy assessment, we now use it to generate forecasts for the next decade. This projection allows us to explore potential trends in electricity consumption in Portugal through 2031, assuming historical patterns continue.
+
+```
+# Forecasting 10 years ahead using the fitted ARIMA(0,2,1) model
+forecast_elec <- elec_fit %>% forecast(h = "10 years")
+
+# Plot forecast with historical data
+forecast_elec %>% autoplot(elec_tsibble) +
+  labs(title = "Electricity Consumption Forecast (Portugal)",
+       y = "Electricity Consumption (billion kWh)",
+       x = "Year")
+```
 
 ### Conclusion and Reflection
 
