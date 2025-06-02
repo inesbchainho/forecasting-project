@@ -1,130 +1,130 @@
 ---
 title: "forec_methods_notebook"
-author: "Inês Chainho"
+author: "Beatriz Gil, Inês Chainho"
 date: "2025-05-08"
 output: pdf_document
 ---
 
+
 ### Introduction
 
-Recently, energy forecasting has become increasingly important for supporting grid stability and sustainable energy policy. Accurate forecasts are essential for energy providers to anticipate demand, manage resources efficiently, and support the ongoing energy transition, so we will focus on forecasting electricity consumption in Portugal. The goal of this project is to apply the Box-Jenkins methodology to model and forecast electricity usage patterns, helping to inform decisions related to grid management and energy planning.
+Recently, energy forecasting has become increasingly important for supporting grid stability and sustainable energy policy. Accurate forecasts are essential for energy providers to anticipate demand, manage resources efficiently, and support the ongoing energy transition, so we will focus on forecasting electricity consumption in Portugal. The goal of this project is to apply the Box-Jenkins methodology in R to model and forecast electricity usage patterns, helping to inform decisions related to grid management and energy planning.
 
 The data we will use, from 1980 to 2021, was withdrawn from a Global Electricity Statistics dataset in Kaggle, where only the data relating to Portugal was kept. The dataset is in the normal Time Series format, where the index is the years and the features are the following variables:
 
-* Elec_generation - Electricity generation/production in billion kWh;
-* Elec_consumption - Electricity consumption in billion kWh;
-* Elec_imports - Electricity imports in billion kWh;
-* Elec_exports - Electricity exports in billion kWh;
-* Net_imports - Electricity net imports in billion kWh;
-* Installed_capacity - The maximum amount of electricity that a generating station can produce in million kW;
-* Distribution_loss - Losses that occur in transmission of electricity between the sources of supply and points of distribution in billion kWh.
+- Elec_generation: Electricity generation/production in billion kWh;
+- Elec_consumption: Electricity consumption in billion kWh;
+- Elec_imports: Electricity imports in billion kWh;
+- Elec_exports: Electricity exports in billion kWh;
+- Net_imports: Electricity net imports in billion kWh;
+- Installed_capacity: The maximum amount of electricity that a generating station can produce in million kW;
+- Distribution_loss: Losses that occur in transmission of electricity between the sources of supply and points of distribution in billion kWh.
 
-### Stationarity of the process
-
-Firstly, let's open all the libraries needed:
-
-```
+```{r load, echo=FALSE, message=FALSE, warning=FALSE}
 library(fpp3)
 library(tseries)
 library(urca)
 library(forecast)
 library(fable)
+library(knitr)
 ```
 
-Now, before anything else, we need to make sure that the variable we are going to study - electricity consumption - belongs to a stochastic stationary process.
 
-In the next piece of code, we are going to import the dataset and create a tsibble off of it, with the index being the time variable - X. Then, we will autoplot the desired variable - Elec_consumption.
+### Stationarity Analysis
 
-```
-# original dataset
+Firstly, we need to make sure that the variable we are going to study - electricity consumption - belongs to a stochastic stationary process.
+
+To do this, we are going to import the dataset and create a tsibble off of it, with the index being the time variable - X. Then, we will autoplot the desired variable - Elec_consumption.
+
+```{r figure1, echo=FALSE, message=FALSE, warning=FALSE}
+# Original dataset
 eletricity_ds <- read.csv("C:/Users/inesb/Downloads/Portugal_yearly_energy_data.csv")
-View(eletricity_ds)
+kable(head(eletricity_ds), caption = "Table 1: Head of Electricity dataset")
 
-# original tsibble
+# Original tsibble 
 elec_tsibble <- eletricity_ds %>% as_tsibble(index = X)
-View(elec_tsibble)
-elec_tsibble %>% autoplot(Elec_consumption)
+elec_tsibble %>% autoplot(Elec_consumption) + labs(title = 'Image 1: Plot of Electricity Consumption tsibble', x = 'Year')
 ```
 
-In the next part, we will make an Augmented Dickey Fuller Test to check the stationarity of the process chosen. We proceeded by creating an array of the values in the desired variable - Elec_consumption - and setting "start" to the first year considered - 1980 - and "frequency" to 1, since it's yearly data. If the p-value < 0.05, we will reject the null hypothesis and conclude that the series is stationary. If the p-value ≥ 0.05, the series is non-stationary.
+In the next part, we will make an Augmented Dickey Fuller Test to check the stationarity of the process chosen. We will proceed by creating an array of the values in the desired variable - Elec_consumption. If the p-value < 0.05, we will reject the null hypothesis and conclude that the series is stationary. If the p-value ≥ 0.05, the series is non-stationary.
 We will also display the plot, the ACF, and the PACF so we can get some insights.
 
-```
+```{r figure2, echo=FALSE, message=FALSE, warning=FALSE}
 set.seed(30)
-
 # Elec_consumption original array
 data <- eletricity_ds %>% select(Elec_consumption)
 
 # Elec_consumption time series array
 data_ts <- ts(data, start = 1980, frequency = 1)
 adf_result <- adf.test(data_ts)
-print(adf_result)
+adf_result
 
-# plotting the Elec_consumption, ACF and PACF
-elec_tsibble %>% gg_tsdisplay(Elec_consumption, plot_type='partial')
+# Plotting the Elec_consumption, ACF and PACF
+elec_tsibble %>% gg_tsdisplay(Elec_consumption, plot_type='partial') + labs(title = 'Image 2: Components of Electricity Consumption tsibble', x = 'Year')
 ```
 
 Since the p-value = 0.9739, we accepted the null hypotheses, meaning the series is non-stationary. This is also clearly visible in the ACF function, which is infinite but doesn't decay to zero exponentially.
 By looking at the Elec_consumption plot, it looks like a random walk, but let's check if it actually is by doing the KPSS Unit Root Test.
 
-```
+```{r code1, echo=FALSE, message=FALSE, warning=FALSE}
 kpss_test <- ur.kpss(data_ts)
 summary(kpss_test)
 ```
 
-The test statistic is greater than all critical values, so we reject the null hypotheses and the time series is very likely difference-stationary (DSP).
+The test statistic is greater than all critical values, so we reject the null hypotheses and conclude that the time series is very likely difference-stationary (DSP). Let's try differencing our array of data:
 
-```
+```{r figure3, echo=FALSE, message=FALSE, warning=FALSE}
 # First-Order Differenced Elec_consumption time series array
 ts_diff <- diff(data_ts, differences = 1)
+autoplot(ts_diff, main = "Differenced Electricity Consumption") + labs(title = 'Image 3: Plot of the First Order Differenced Electricity Consumption tsibble', x = 'Year', y = 'First Order Differenced Electricity Consumption')
 
-plot(ts_diff, main = "Differenced Electricity Consumption")
 kpss_test2 <- ur.kpss(ts_diff)
 summary(kpss_test2)
 adf_result2 <- adf.test(ts_diff)
-print(adf_result2)
+adf_result2
 ```
 
-By making the same tests as before, we conclude the first order differed time series is still non-stationary, so we will difference again.
+By making the same tests as before, we concluded that the first order differenced time series is still non-stationary, so we will difference again.
 
-```
+```{r figure4, echo=FALSE, message=FALSE, warning=FALSE}
 # Second-Order Differenced Elec_consumption time series array
 ts_diff2 <- diff(ts_diff, differences = 1)
+autoplot(ts_diff2, main = "Second Order Differenced Electricity Consumption") + labs(title = 'Image 4: Plot of the Second Order Differenced Electricity Consumption tsibble', x = 'Year', y = 'Second Order Differenced Electricity Consumption')
 
-plot(ts_diff2, main = "Second Order Differenced Electricity Consumption")
 kpss_test3 <- ur.kpss(ts_diff2)
 summary(kpss_test3)
 adf_result3 <- adf.test(ts_diff2)
-print(adf_result3)
+adf_result3
 ```
 
-Now, we finally have a stationary time series relating to the Electricity Consumption in the period considered.
+Now, we finally have a stationary time series relating to the electricity consumption in the period considered.
+
 
 ### Tentative Identification
 
-In the next piece of code we will generate the ACF and the PACF of the second order differenced time series, so we can suggest some candidate models for analysis during the next stages.
+In the next piece of code, we will generate the ACF and the PACF of the second order differenced time series, so we can suggest some candidate models for analysis during the next stages.
 
-```
+```{r figure5, echo=FALSE, message=FALSE, warning=FALSE}
 # Complete Second-Order Differenced Elec_consumption time series array
 ts_diff_comp <- c(NA, NA, ts_diff2)
 
 # Complete original tsibble
 elec_tsibble_comp <- elec_tsibble %>% mutate(Elec_cons_diff = ts_diff_comp)
-View(elec_tsibble_comp)
-elec_tsibble_comp %>% gg_tsdisplay(Elec_cons_diff, plot_type='partial')
+
+elec_tsibble_comp %>% gg_tsdisplay(Elec_cons_diff, plot_type='partial') + labs(title = 'Image 5: Components of Second Order Differenced Electricity Consumption tsibble', x = 'Year')
 ```
 
-By looking at the ACF, we can see it is finite and cuts off after lag 1 or 2, which suggests MA(1) or MA(2) model. By looking at the PACF, we can see it is infinite and exponentially decays to 0 after lag 2. The models we suggest looking into are ARIMA(2, 2, 1) and ARIMA(2, 2, 2).
-Let's also see what the algorithm picks:
+By looking at the ACF, we can see it is either finite and cuts off after lag 1, which suggests MA(1) model. By looking at the PACF, it appears to be infinite and exponentially decay to 0, suggesting the ARIMA(0, 2, 1). But the PACF could also be finite and cut off after lag 2, so let's also explore the model ARIMA(2, 2, 1).
+Now, we are going to check what the algorithm picks:
 
-```
+```{r code2, echo=FALSE, message=FALSE, warning=FALSE}
 auto.arima(ts_diff2)
 ```
 
-The algorithm suggests ARIMA(0,0,1) so we will also look into ARIMA(0, 2, 1).
-Now let's create a function to calculate the Information Criteria through the 3 equations we know - Akaike IC (AIC), Hannan-Quinn IC (HQIC) and Bayesian or Schwarz IC (BSIC) - and test the model who minimizes them the most.
+The algorithm suggests ARIMA(0, 0, 1), which confirms ARIMA(0, 2, 1) was a good model suggestion for our original time series.
+Now, let's create a function to calculate the Information Criteria through the 3 equations we know - Akaike IC (AIC), Hannan-Quinn IC (HQIC) and Bayesian or Schwarz IC (BSIC) - and test the model who minimizes all of them the most. The output values correspond, respectively, to the models ARIMA(0, 2, 1) and ARIMA(2, 2, 1).
 
-```
+```{r code3, message=FALSE, warning=FALSE}
 calc_ic <- function(dev, p, q, T) {
   ldev <- log(dev)
   k <- p + q + 1
@@ -132,50 +132,111 @@ calc_ic <- function(dev, p, q, T) {
   hqic <- ldev + 2*k*log(log(T))/T
   bsic <- ldev + k*log(T)/T
   return(c(aic, hqic, bsic))}
+```
+
+```{r code4, echo=FALSE, message=FALSE, warning=FALSE}
+# fit ARIMA(0,2,1)
+model021 <- Arima(data_ts, order = c(0,2,1))
+dev021 <- model021$sigma2
+T021 <- length(model021$residuals)
+calc_ic(dev021, 0, 1, T021)
 
 # fit ARIMA(2,2,1)
 model221 <- Arima(data_ts, order = c(2,2,1))
 dev221 <- model221$sigma2
 T221 <- length(model221$residuals)
 calc_ic(dev221, 2, 1, T221)
-
-# fit ARIMA(2,2,2)
-model222 <- Arima(data_ts, order = c(2,2,2))
-dev222 <- model222$sigma2
-T222 <- length(model222$residuals)
-calc_ic(dev222, 2, 2, T222)
-
-# fit ARIMA(0,2,1)
-model021 <- Arima(data_ts, order = c(0,2,1))
-summary(model021)
-dev021 <- model021$sigma2
-T021 <- length(model021$residuals)
-calc_ic(dev021, 0, 1, T021)
 ```
 
-Acording to the values obtained, the model that minimizes the Information Criteria is ARIMA(0,2,1), so this should be the model we use from now on.
+Acording to the values obtained, the model that minimizes the Information Criteria is ARIMA(0,2,1), so this is the model we will use in the estimation and further on.
 
-### Estimation
 
-Firstly, we will fit the model and check its report and residuals.
+### Model Estimation
 
-```
-elec_tsibble %>% model(ARIMA(Elec_consumption ~ pdq(0,2,1))) %>% report()
-elec_tsibble %>% select(X, Elec_consumption) %>% select(arima021) %>% gg_tsresiduals()
-```
+Now, we need to fit the model and then check its report for insights:
 
-Now we will do the Ljung-Box and the Ljung-Box-Pierce methods to check if the model is adequate or not with an hypotheses test:
-
-```
-# Fitted original tsibble
-elec_fit <- elec_tsibble %>% model(arima_021 = ARIMA(Elec_consumption ~ pdq(0,2,1)))
-
-View(elec_fit)
-augment(elec_fit) %>% features(.innov, ljung_box, lag = 10, dof = 3)
-augment(elec_fit) %>% features(.innov, box_pierce, lag = 10, dof = 3)
+```{r code5, echo=FALSE, message=FALSE, warning=FALSE}
+fitted_full_tsibble <- elec_tsibble %>% model(ARIMA(Elec_consumption ~ pdq(0,2,1)))
+fitted_full_tsibble %>% report()
 ```
 
-Since the p-value (0.898 and 0.846) is greater than the significance level (0.05), we accept the null hypotheses, meaning there is no residual autocorrelation, and our model is adequate.
+From the report, we conclude that the coefficient is statistically significant and that there is a negative correlation at lag 1 in the noise process.
 
-### Forecasting Implementation
+### Diagnostic Checking
 
+The first step of this section is checking the residuals of the model:
+
+```{r figure6, echo=FALSE, message=FALSE, warning=FALSE}
+fitted_full_tsibble %>% gg_tsresiduals()
+```
+
+In the ACF plot, we observe that the autocorrelations of the residuals fall within the critical bounds, indicating they are not significantly different from zero — which suggests the residuals are uncorrelated, as desired.
+
+Next, we will do two hypotheses tests to check if the model is adequate or not. The output values correspond, respectively, to the Ljung-Box and the Ljung-Box-Pierce methods.
+
+```{r code6, echo=FALSE, message=FALSE, warning=FALSE}
+augment(fitted_full_tsibble) %>% features(.innov, ljung_box, lag = 10, dof = 3)
+augment(fitted_full_tsibble) %>% features(.innov, box_pierce, lag = 10, dof = 3)
+```
+
+Since the p-value (0.846 and 0.898) is always greater than the significance level (0.05), we accept the null hypotheses, meaning there is no residual autocorrelation, and our model is adequate.
+
+### Accuracy Assessment
+
+Now that we have identified and validated the ARIMA(0,2,1) model as the best candidate for modeling electricity consumption in Portugal, we will assess its predictive performance on unseen data. To do this, we will firstly split the data into training and testing subsets. The training data will then be used to fit the model, and the last five years will be kept as a test set to evaluate forecast performance.
+
+```{r code7, message=FALSE, warning=FALSE}
+# Splitting into training/testing sets for accuracy 
+train_data <- elec_tsibble %>% filter(X <= 2016)
+test_data  <- elec_tsibble %>% filter(X > 2016)
+
+# Fitting model on training set
+train_fit <- train_data %>% model(arima_train = ARIMA(Elec_consumption ~ pdq(0,2,1)))
+```
+
+```{r figure7, echo=FALSE, message=FALSE, warning=FALSE}
+# Forecasting 5 years ahead and compare with actual values
+fc <- train_fit %>% forecast(h = "5 years")
+
+# Plotting forecast vs actual
+fc %>% autoplot(train_data, level = 95) +
+  autolayer(test_data, Elec_consumption, color = "red") +
+  labs(title = "Forecast vs Actual: ARIMA(0,2,1)", y = "Electricity Consumption", x = "Year")
+
+# Forecasting accuracy
+fc %>% accuracy(test_data)
+```
+
+The results show strong predictive performance:
+- The model had a low mean error (ME = 0.190), suggesting minimal bias.
+- Both RMSE (0.811) and MAE (0.731) indicate a good fit, with relatively small forecast deviations.
+- A MAPE of 1.50% confirms excellent overall accuracy, with predictions deviating only slightly from actual consumption values.
+- Residual autocorrelation was low (ACF1 = 0.291), indicating that most of the temporal structure was successfully captured.
+- Although some metrics (MASE and RMSSE) returned NaN values, likely due to the test sample size or scaling limitations, the available indicators suggest that the model performs well.
+
+
+### Forecast Implementation
+
+With the ARIMA(0,2,1) model validated through historical accuracy assessment, we will now use it to generate forecasts for the next decade. This projection allows us to explore potential trends in electricity consumption in Portugal through 2031, assuming historical patterns continue.
+
+```{r figure8, echo=FALSE, message=FALSE, warning=FALSE}
+# Forecasting 10 years ahead using the fitted ARIMA(0,2,1) model
+forecast_elec <- fitted_full_tsibble %>% forecast(h = "10 years")
+
+# Plotting forecast with historical data
+forecast_elec %>% autoplot(elec_tsibble) +
+  labs(title = "Electricity Consumption Forecast (Portugal)",
+       y = "Electricity Consumption (billion kWh)",
+       x = "Year")
+```
+
+
+### Conclusion and Reflection
+
+In this project, we applied the Box-Jenkins methodology to model and forecast electricity consumption in Portugal using annual data from 1980 to 2021. After testing for stationarity using the ADF and KPSS tests, we concluded that the series was second-order difference stationary. Through ACF/PACF diagnostics and information criteria comparisons, ARIMA(0,2,1) was selected as the most appropriate model.
+
+The model performed adequately, as confirmed by the Ljung-Box test showing no significant autocorrelation in the residuals. Forecasts produced by the model indicate a continued upward trend in electricity consumption, although with some uncertainty due to the differencing applied and limited frequency of the data (annual). Accuracy was assessed using a 5-year holdout, and metrics like RMSE and MAPE indicated good performance; however, the small test set size constrains the robustness and generalizability of these findings.
+
+Nonetheless, there are some limitations to consider. The use of annual data reduces the granularity of the analysis, meaning potential seasonal patterns cannot be captured. Additionally, external shocks, such as policy changes, the COVID-19 pandemic or energy market disruptions are not explicitly accounted for in the model.
+
+Possible improvements could involve using a higher-frequency dataset (e.g., monthly or quarterly), which would allow the implementation of models that handle seasonality, such as SARIMA or ETS. Moreover, machine learning methods like neural network-based models could be investigated to enhance forecast accuracy and capture more complex patterns when richer datasets are accessible.
